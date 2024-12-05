@@ -1,7 +1,7 @@
 ---
 # This is a LEGACY play! This play has been split
-# into several smaller chunks that are utilized
-# in https://ansible2.mcis.washington.edu/#/templates/workflow_job_template/219
+# into several smaller chunks that are utilized in
+# an AAP workflow
 
 - name: "Upgrade from RHEL 8.10 to RHEL 9.4 via LEAPP"
   hosts: "{{ upgrade_hosts }}"
@@ -35,10 +35,10 @@
         - all
       loop_control:
         loop_var: service
-        label: "Setting {{ service }} downtime for {{ ansible_hostname }} in la-dcom-nag-p4.mcis.washington.edu"
+        label: "Setting {{ service }} downtime for {{ ansible_hostname }} in {{ nagios_host }}"
       vars:
         downtime_comment: "LEAPP Upgrade via AAP JID {{ awx_job_id }} ran by {{ awx_user_first_name }} {{ awx_user_last_name }}"
-      delegate_to: la-dcom-nag-p4.mcis.washington.edu
+      delegate_to: "{{ nagios_host }}"
       community.general.nagios:
         action: downtime
         minutes: 240
@@ -78,8 +78,8 @@
          community.vmware.vmware_guest_snapshot:
            hostname: "{{ hostname }}"
            datacenter: "{{ datacenter_name }}"
-           username: svc_lse_vcenter@amc.uwmedicine.org
-           password: "{{ vault_svc_lse_vcenter_password }}"
+           username: "{{ vsphere_username }}"
+           password: "{{ vsphere_password }}"
            uuid: "{{ vm_uuid }}"
            state: remove_all
            validate_certs: false
@@ -88,8 +88,8 @@
          community.vmware.vmware_guest_snapshot:
            hostname: "{{ hostname }}"
            datacenter: "{{ datacenter_name }}"
-           username: svc_lse_vcenter@amc.uwmedicine.org
-           password: "{{ vault_svc_lse_vcenter_password }}"
+           username: "{{ vsphere_username }}"
+           password: "{{ vsphere_password }}"
            uuid: "{{ vm_uuid }}"
            snapshot_name: pre_leap_upgrade
            validate_certs: false
@@ -104,8 +104,8 @@
             headers:
               Accept: application/json
             force_basic_auth: true
-            url_username: svc_lse_ntx@amc.uwmedicine.org
-            url_password: "{{ vault_svc_lse_ntx_password }}"
+            url_username: "{{ nutanix_username }}"
+            url_password: "{{ nutanix_password }}"
             validate_certs: false
 
         - name: "Delete old Nutanix snapshots for {{ inventory_hostname }}"
@@ -120,8 +120,8 @@
             headers:
               Accept: application/json
             force_basic_auth: true
-            url_username: svc_lse_ntx@amc.uwmedicine.org
-            url_password: "{{ vault_svc_lse_ntx_password }}"
+            url_username: "{{ nutanix_username }}"
+            url_password: "{{ nutanix_password }}"
             validate_certs: false
             status_code: 201
 
@@ -139,8 +139,8 @@
             headers:
               Accept: application/json
             force_basic_auth: true
-            url_username: svc_lse_ntx@amc.uwmedicine.org
-            url_password: "{{ vault_svc_lse_ntx_password }}"
+            url_username: "{{ nutanix_username }}"
+            url_password: "{{ nutanix_password }}"
             validate_certs: false
 
         - name: "Take a Nutanix snapshot of {{ inventory_hostname }}"
@@ -156,8 +156,8 @@
             headers:
               Accept: application/json
             force_basic_auth: true
-            url_username: svc_lse_ntx@amc.uwmedicine.org
-            url_password: "{{ vault_svc_lse_ntx_password }}"
+            url_username: "{{ nutanix_username }}"
+            url_password: "{{ nutanix_password }}"
             validate_certs: false
             status_code: 201
 
@@ -171,8 +171,8 @@
             headers:
               Accept: application/json
             force_basic_auth: true
-            url_username: svc_lse_ntx@amc.uwmedicine.org
-            url_password: "{{ vault_svc_lse_ntx_password }}"
+            url_username: "{{ nutanix_username }}"
+            url_password: "{{ nutanix_password }}"
             validate_certs: false
 
     - name: "Remove any older versions of LEAPP"
@@ -190,10 +190,10 @@
         - "subscription-manager remove --all"
         - "subscription-manager unregister"
         - "subscription-manager clean"
-        - "dnf erase -y katello-ca-consumer-la-lse-sat-p1.mcis.washington.edu"
+        - "dnf erase -y katello-*"
         - "dnf clean all"
         - "rm -rf /var/cache/dnf/*"
-        - "curl -k --output /tmp/katello-ca-consumer-latest.noarch.rpm https://la-lse-sat-p1.mcis.washington.edu/pub/katello-ca-consumer-latest.noarch.rpm"
+        - "curl -k --output /tmp/katello-ca-consumer-latest.noarch.rpm https://{{ satellite }}/pub/katello-ca-consumer-latest.noarch.rpm"
         - "dnf install -y /tmp/katello-ca-consumer-latest.noarch.rpm"
       loop_control:
         label: "Running `{{ item }}`"
@@ -203,7 +203,7 @@
     - name: "Bind host to Satellite server with RHEL9.4 LEAPP key"
       community.general.redhat_subscription:
         activationkey: "rhel8-rhel9.4-leapp"
-        org_id: "ETS-PS-LINUX"
+        org_id: "{{ org }}"
         force_register: true
 
     # https://access.redhat.com/solutions/5118641       
@@ -211,11 +211,11 @@
       theforeman.foreman.host:
         username: "{{ awx_user_name }}"
         password: "{{ user_sat_password }}"
-        server_url: "https://la-lse-sat-p1.mcis.washington.edu"
-        organization: "ETS-PS-LINUX"
+        server_url: "https://{{ satellite }}"
+        organization: "{{ org }}"
         name: "{{ inventory_hostname }}"
         validate_certs: false
-        content_source: "la-lse-sat-p1.mcis.washington.edu"
+        content_source: "{{ satellite }}"
         lifecycle_environment: "Library"
         content_view: "Default Organization View"
   
@@ -391,8 +391,8 @@
                 headers:
                   Accept: application/json
                 force_basic_auth: true
-                url_username: svc_lse_ntx@amc.uwmedicine.org
-                url_password: "{{ vault_svc_lse_ntx_password }}"
+                url_username: "{{ nutanix_username }}"
+                url_password: "{{ nutanix_password }}"
                 validate_certs: false
                 status_code: 201
     
@@ -407,8 +407,8 @@
                 headers:
                   Accept: application/json
                 force_basic_auth: true
-                url_username: svc_lse_ntx@amc.uwmedicine.org
-                url_password: "{{ vault_svc_lse_ntx_password }}"
+                url_username: "{{ nutanix_username }}"
+                url_password: "{{ nutanix_password }}"
                 validate_certs: false
     
             - name: "Power {{ inventory_hostname }} back on in Nutanix"
@@ -417,8 +417,8 @@
                 state: power_on
                 vm_uuid: "{{ vm_uuid }}"
                 nutanix_host: "{{ nutanix_element }}"
-                nutanix_username: "{{ vault_nutanix_svc_account }}"
-                nutanix_password: "{{ vault_nutanix_svc_password }}"
+                nutanix_username: "{{ nutanix_username }}"
+                nutanix_password: "{{ nutanix_password }}"
                 validate_certs: false
 
             - name: "Wait for connection to {{ inventory_hostname }} in Nutanix"
@@ -432,8 +432,8 @@
               community.vmware.vmware_guest_snapshot:
                 hostname: "{{ hostname }}"
                 datacenter: "{{ datacenter_name }}"
-                username: svc_lse_vcenter@amc.uwmedicine.org
-                password: "{{ vault_svc_lse_vcenter_password }}"
+                username: "{{ vsphere_username }}"
+                password: "{{ vsphere_password }}"
                 uuid: "{{ vm_uuid }}"
                 state: revert
                 snapshot_name: pre_leap_upgrade
@@ -443,8 +443,8 @@
               delegate_to: localhost
               community.vmware.vmware_guest_powerstate:
                 hostname: "{{ hostname }}"
-                username: svc_lse_vcenter@amc.uwmedicine.org
-                password: "{{ vault_svc_lse_vcenter_password }}"
+                username: "{{ vsphere_username }}"
+                password: "{{ vsphere_password }}"
                 uuid: "{{ vm_uuid }}"
                 state: powered-on
                 validate_certs: false
@@ -462,10 +462,10 @@
         - "subscription-manager remove --all"
         - "subscription-manager unregister"
         - "subscription-manager clean"
-        - "dnf erase -y katello-ca-consumer-la-lse-sat-p1.mcis.washington.edu"
+        - "dnf erase -y katello-ca-consumer-*"
         - "dnf clean all"
         - "rm -rf /var/cache/dnf/*"
-        - "curl -k --output /tmp/katello-ca-consumer-latest.noarch.rpm https://la-lse-sat-p1.mcis.washington.edu/pub/katello-ca-consumer-latest.noarch.rpm"
+        - "curl -k --output /tmp/katello-ca-consumer-latest.noarch.rpm https://{{ satellite }}/pub/katello-ca-consumer-latest.noarch.rpm"
         - "dnf install -y /tmp/katello-ca-consumer-latest.noarch.rpm"
       loop_control:
         label: "Running `{{ item }}`"
@@ -474,7 +474,7 @@
   
     - name: "Bind System to Satellite Server"
       ansible.builtin.include_role:
-        name: ets_ps_lse.bind_to_satellite
+        name: bind_to_satellite
 
     - name: "Delete downtime for hosts in Nagios"
       loop:
@@ -482,10 +482,10 @@
         - all
       loop_control:
         loop_var: service
-        label: "Deleted {{ service }} downtime for {{ ansible_hostname }} in la-dcom-nag-p4.mcis.washington.edu"
+        label: "Deleted {{ service }} downtime for {{ ansible_hostname }} in {{ nagios_host }}"
       vars:
         downtime_comment: "Completed LEAPP upgrade via AAP JID {{ awx_job_id }} ran by {{ awx_user_first_name }} {{ awx_user_last_name }}"
-      delegate_to: la-dcom-nag-p4.mcis.washington.edu
+      delegate_to: "{{ nagios_hostname }}"
       community.general.nagios:
         action: delete_downtime
         service: '{{ service }}'
